@@ -1,8 +1,12 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
 import com.example.data.local.AppDatabase
 import com.example.data.model.ArchiePose
 import com.example.data.model.BackgroundTheme
@@ -18,11 +22,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.UUID
 
 data class RenderState(
     val isRendering: Boolean = false,
-    val progress: Float = 0f, // 0.0 to 1.0
+    val progress: Float = 0f,
     val currentFrame: Int = 0,
     val totalFrames: Int = 0,
     val currentStage: String = "",
@@ -45,10 +50,11 @@ data class StudioEditorUiState(
     val audioMeterLevel: Float = 0f,
     val isDialogueAutoAnalyzed: Boolean = false,
     val renderState: RenderState = RenderState(),
-    val activeTab: Int = 0 // 0: Timeline, 1: Stage/Poses, 2: Audio/Music, 3: Captions, 4: Export
+    val activeTab: Int = 0
 )
 
 class StudioEditorViewModel(application: Application) : AndroidViewModel(application) {
+
     private val database = AppDatabase.getDatabase(application)
     private val repository = ProjectRepository(database.projectDao())
 
@@ -58,28 +64,139 @@ class StudioEditorViewModel(application: Application) : AndroidViewModel(applica
     private var playbackJob: Job? = null
     private var renderJob: Job? = null
 
+    /*
+     * REAL AUDIO PLAYERS
+     *
+     * voicePlayer = imported Archie/Jarvis recording
+     * musicPlayer = imported background music
+     */
+    private val voicePlayer: ExoPlayer =
+        ExoPlayer.Builder(application.applicationContext).build()
+
+    private val musicPlayer: ExoPlayer =
+        ExoPlayer.Builder(application.applicationContext).build()
+
+    init {
+        voicePlayer.repeatMode = Player.REPEAT_MODE_OFF
+        musicPlayer.repeatMode = Player.REPEAT_MODE_ALL
+
+        voicePlayer.addListener(
+            object : Player.Listener {
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_ENDED) {
+                        pausePlayback()
+                        seekTo(0f)
+                    }
+                }
+            }
+        )
+    }
+
     fun loadProject(projectId: Long) {
         viewModelScope.launch {
             val project = repository.getProjectDirect(projectId)
+
             if (project != null) {
-                val beats = AppDatabase.deserializeBeats(project.dialogueJson).ifEmpty {
-                    AppDatabase.deserializeBeats(AppDatabase.getSampleDialogueForShort())
-                }
-                val totalDuration = beats.sumOf { it.durationSec.toDouble() }.toFloat().coerceAtLeast(1f)
-                _uiState.value = _uiState.value.copy(
-                    project = project,
-                    beats = beats,
-                    totalDurationSec = totalDuration,
-                    activeArchiePose = if (beats.isNotEmpty() && beats[0].speaker == CharacterType.ARCHIE) beats[0].poseTag else ArchiePose.IDLE.tag,
-                    activeJarvisPose = if (beats.isNotEmpty() && beats[0].speaker == CharacterType.JARVIS) beats[0].poseTag else JarvisPose.CALM.tag,
-                    activeCaptionText = if (beats.isNotEmpty()) beats[0].text else ""
-                )
+                val beats =
+                    AppDatabase.deserializeBeats(project.dialogueJson).ifEmpty {
+                        AppDatabase.deserializeBeats(
+                            AppDatabase.getSampleDialogueForShort()
+                        )
+                    }
+
+                val beatDuration =
+                    beats.sumOf { it.durationSec.toDouble() }
+                        .toFloat()
+                        .coerceAtLeast(1f)
+
+                _uiState.value =
+                    _uiState.value.copy(
+                        project = project,
+                        beats = beats,
+                        totalDurationSec =
+                            if (project.archieAudioDurationSec > 0f) {
+                                project.archieAudioDurationSec
+                            } else {
+                                beatDuration
+                            },
+                        currentTimeSec = 0f,
+                        currentBeatIndex = 0,
+                        activeArchiePose =
+                            if (
+                                beats.isNotEmpty() &&
+                                beats[0].speaker == CharacterType.ARCHIE
+                            ) {
+                                beats[0].poseTag
+                            } else {
+                                ArchiePose.IDLE.tag
+                            },
+                        activeJarvisPose =
+                            if (
+                                beats.isNotEmpty() &&
+                                beats[0].speaker == CharacterType.JARVIS
+                            ) {
+                                beats[0].poseTag
+                            } else {
+                                JarvisPose.CALM.tag
+                            },
+                        activeCaptionText =
+                            if (beats.isNotEmpty()) beats[0].text else ""
+                    )
+
+                prepareAudioPlayers(project)
             }
         }
     }
 
+    /*
+     * Loads the actual imported files into ExoPlayer.
+     */
+    private fun prepareAudioPlayers(project: ProjectEntity) {
+
+        voicePlayer.stop()
+        voicePlayer.clearMediaItems()
+
+        musicPlayer.stop()
+        musicPlayer.clearMediaItems()
+
+        project.archieAudioPath
+            ?.takeIf { it.isNotBlank() }
+            ?.let { path ->
+
+                val file = File(path)
+
+                if (file.exists()) {
+                    voicePlayer.setMediaItem(
+                        MediaItem.fromUri(file.toUri())
+                    )
+
+                    voicePlayer.prepare()
+                    voicePlayer.volume =
+                        project.voiceVolume.coerceIn(0f, 1f)
+                }
+            }
+
+        project.backgroundMusicPath
+            ?.takeIf { it.isNotBlank() }
+            ?.let { path ->
+
+                val file = File(path)
+
+                if (file.exists()) {
+                    musicPlayer.setMediaItem(
+                        MediaItem.fromUri(file.toUri())
+                    )
+
+                    musicPlayer.prepare()
+                    musicPlayer.volume =
+                        project.musicVolume.coerceIn(0f, 1f)
+                }
+            }
+    }
+
     fun setActiveTab(index: Int) {
-        _uiState.value = _uiState.value.copy(activeTab = index)
+        _uiState.value =
+            _uiState.value.copy(activeTab = index)
     }
 
     fun togglePlayback() {
@@ -90,165 +207,376 @@ class StudioEditorViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
+    /*
+     * REAL PLAYBACK
+     */
     fun startPlayback() {
+
         playbackJob?.cancel()
-        _uiState.value = _uiState.value.copy(isPlaying = true)
 
-        playbackJob = viewModelScope.launch {
-            val updateIntervalMs = 50L
-            val stepSec = updateIntervalMs / 1000f
+        val project = _uiState.value.project ?: return
 
-            while (_uiState.value.isPlaying) {
-                delay(updateIntervalMs)
-                val state = _uiState.value
-                val beats = state.beats
-                if (beats.isEmpty()) break
+        voicePlayer.volume =
+            project.voiceVolume.coerceIn(0f, 1f)
 
-                var newTime = state.currentTimeSec + stepSec
-                if (newTime >= state.totalDurationSec) {
-                    newTime = 0f // Loop playback
-                }
+        musicPlayer.volume =
+            project.musicVolume.coerceIn(0f, 1f)
 
-                // Determine active beat
-                var accumulated = 0f
-                var targetBeatIndex = 0
-                var found = false
+        val startMs =
+            (_uiState.value.currentTimeSec * 1000f).toLong()
 
-                for (i in beats.indices) {
-                    val beat = beats[i]
-                    if (newTime >= accumulated && newTime < (accumulated + beat.durationSec)) {
-                        targetBeatIndex = i
-                        found = true
-                        break
-                    }
-                    accumulated += beat.durationSec
-                }
-                if (!found && beats.isNotEmpty()) {
-                    targetBeatIndex = beats.lastIndex
-                }
-
-                val currentBeat = beats[targetBeatIndex]
-                val speaker = currentBeat.speaker
-                val archiePose = if (speaker == CharacterType.ARCHIE) currentBeat.poseTag else ArchiePose.IDLE.tag
-                val jarvisPose = if (speaker == CharacterType.JARVIS) currentBeat.poseTag else JarvisPose.CALM.tag
-                val meter = (0.4f + (Math.sin(newTime.toDouble() * 12.0).toFloat() * 0.45f).coerceIn(-0.3f, 0.5f)).coerceIn(0.1f, 1f)
-
-                _uiState.value = state.copy(
-                    currentTimeSec = newTime,
-                    currentBeatIndex = targetBeatIndex,
-                    activeSpeaker = speaker,
-                    activeArchiePose = archiePose,
-                    activeJarvisPose = jarvisPose,
-                    activeCaptionText = currentBeat.text,
-                    activeSfxCue = currentBeat.sfxCue.takeIf { it != "None" },
-                    audioMeterLevel = meter
-                )
-            }
+        if (voicePlayer.mediaItemCount > 0) {
+            voicePlayer.seekTo(startMs)
+            voicePlayer.play()
         }
+
+        if (musicPlayer.mediaItemCount > 0) {
+            /*
+             * Keep soundtrack synchronized to the timeline.
+             * If the soundtrack is shorter than the voice track,
+             * ExoPlayer loops it.
+             */
+            val musicDuration = musicPlayer.duration
+
+            val musicPosition =
+                if (musicDuration > 0) {
+                    startMs % musicDuration
+                } else {
+                    startMs
+                }
+
+            musicPlayer.seekTo(musicPosition)
+            musicPlayer.play()
+        }
+
+        _uiState.value =
+            _uiState.value.copy(isPlaying = true)
+
+        playbackJob =
+            viewModelScope.launch {
+
+                while (_uiState.value.isPlaying) {
+
+                    delay(50)
+
+                    val currentState = _uiState.value
+                    val beats = currentState.beats
+
+                    if (beats.isEmpty()) {
+                        continue
+                    }
+
+                    /*
+                     * If real voice audio exists, its playback position
+                     * becomes the master timeline clock.
+                     *
+                     * Otherwise fall back to the timeline timer.
+                     */
+                    val newTime =
+                        if (voicePlayer.mediaItemCount > 0) {
+
+                            voicePlayer.currentPosition / 1000f
+
+                        } else {
+
+                            val next =
+                                currentState.currentTimeSec + 0.05f
+
+                            if (next >= currentState.totalDurationSec) {
+                                0f
+                            } else {
+                                next
+                            }
+                        }
+
+                    updateTimelineState(newTime)
+                }
+            }
     }
 
     fun pausePlayback() {
+
         playbackJob?.cancel()
-        _uiState.value = _uiState.value.copy(isPlaying = false, audioMeterLevel = 0f)
+
+        voicePlayer.pause()
+        musicPlayer.pause()
+
+        _uiState.value =
+            _uiState.value.copy(
+                isPlaying = false,
+                audioMeterLevel = 0f
+            )
     }
 
-    fun seekTo(timeSec: Float) {
-        val total = _uiState.value.totalDurationSec
-        val clamped = timeSec.coerceIn(0f, total)
-        val beats = _uiState.value.beats
+    /*
+     * Updates poses, captions and speaker based on the current
+     * position in the real audio timeline.
+     */
+    private fun updateTimelineState(timeSec: Float) {
+
+        val state = _uiState.value
+        val beats = state.beats
+
         if (beats.isEmpty()) return
 
         var accumulated = 0f
-        var targetBeatIndex = 0
+        var targetBeatIndex = beats.lastIndex
+
         for (i in beats.indices) {
+
             val beat = beats[i]
-            if (clamped >= accumulated && clamped < (accumulated + beat.durationSec)) {
+
+            if (
+                timeSec >= accumulated &&
+                timeSec < accumulated + beat.durationSec
+            ) {
                 targetBeatIndex = i
                 break
             }
+
             accumulated += beat.durationSec
         }
 
         val beat = beats[targetBeatIndex]
-        _uiState.value = _uiState.value.copy(
-            currentTimeSec = clamped,
-            currentBeatIndex = targetBeatIndex,
-            activeSpeaker = beat.speaker,
-            activeArchiePose = if (beat.speaker == CharacterType.ARCHIE) beat.poseTag else ArchiePose.IDLE.tag,
-            activeJarvisPose = if (beat.speaker == CharacterType.JARVIS) beat.poseTag else JarvisPose.CALM.tag,
-            activeCaptionText = beat.text
-        )
+        val speaker = beat.speaker
+
+        /*
+         * This meter is only visual for now.
+         * The audio itself is REAL.
+         */
+        val meter =
+            if (_uiState.value.isPlaying) {
+                (
+                    0.45f +
+                        Math.sin(timeSec.toDouble() * 12.0)
+                            .toFloat() * 0.25f
+                    ).coerceIn(0.15f, 0.9f)
+            } else {
+                0f
+            }
+
+        _uiState.value =
+            state.copy(
+                currentTimeSec =
+                    timeSec.coerceIn(
+                        0f,
+                        state.totalDurationSec
+                    ),
+                currentBeatIndex = targetBeatIndex,
+                activeSpeaker = speaker,
+                activeArchiePose =
+                    if (speaker == CharacterType.ARCHIE) {
+                        beat.poseTag
+                    } else {
+                        ArchiePose.IDLE.tag
+                    },
+                activeJarvisPose =
+                    if (speaker == CharacterType.JARVIS) {
+                        beat.poseTag
+                    } else {
+                        JarvisPose.CALM.tag
+                    },
+                activeCaptionText = beat.text,
+                activeSfxCue =
+                    beat.sfxCue.takeIf { it != "None" },
+                audioMeterLevel = meter
+            )
+    }
+
+    /*
+     * REAL AUDIO SEEK
+     */
+    fun seekTo(timeSec: Float) {
+
+        val total =
+            _uiState.value.totalDurationSec
+
+        val clamped =
+            timeSec.coerceIn(0f, total)
+
+        val seekMs =
+            (clamped * 1000f).toLong()
+
+        if (voicePlayer.mediaItemCount > 0) {
+            voicePlayer.seekTo(seekMs)
+        }
+
+        if (musicPlayer.mediaItemCount > 0) {
+
+            val musicDuration =
+                musicPlayer.duration
+
+            val musicPosition =
+                if (musicDuration > 0) {
+                    seekMs % musicDuration
+                } else {
+                    seekMs
+                }
+
+            musicPlayer.seekTo(musicPosition)
+        }
+
+        updateTimelineState(clamped)
     }
 
     fun jumpToBeat(index: Int) {
-        val beats = _uiState.value.beats
-        if (index in beats.indices) {
-            var time = 0f
-            for (i in 0 until index) {
-                time += beats[i].durationSec
-            }
-            seekTo(time + 0.05f)
+
+        val beats =
+            _uiState.value.beats
+
+        if (index !in beats.indices) return
+
+        var time = 0f
+
+        for (i in 0 until index) {
+            time += beats[i].durationSec
         }
+
+        seekTo(time + 0.05f)
     }
 
-    fun addBeat(speaker: CharacterType = CharacterType.ARCHIE, text: String = "New dialogue beat...") {
-        val pose = DialogueBeat.detectPose(speaker, text)
-        val newBeat = DialogueBeat(
-            id = "b_${UUID.randomUUID().toString().take(6)}",
-            speaker = speaker,
-            text = text,
-            poseTag = pose,
-            durationSec = 3.5f,
-            sfxCue = "None"
+    fun addBeat(
+        speaker: CharacterType = CharacterType.ARCHIE,
+        text: String = "New dialogue beat..."
+    ) {
+
+        val pose =
+            DialogueBeat.detectPose(
+                speaker,
+                text
+            )
+
+        val newBeat =
+            DialogueBeat(
+                id =
+                    "b_${
+                        UUID.randomUUID()
+                            .toString()
+                            .take(6)
+                    }",
+                speaker = speaker,
+                text = text,
+                poseTag = pose,
+                durationSec = 3.5f,
+                sfxCue = "None"
+            )
+
+        updateBeatsList(
+            _uiState.value.beats + newBeat
         )
-        val updatedList = _uiState.value.beats + newBeat
-        updateBeatsList(updatedList)
     }
 
-    fun updateBeat(index: Int, updated: DialogueBeat) {
-        val list = _uiState.value.beats.toMutableList()
+    fun updateBeat(
+        index: Int,
+        updated: DialogueBeat
+    ) {
+
+        val list =
+            _uiState.value.beats
+                .toMutableList()
+
         if (index in list.indices) {
+
             list[index] = updated
+
             updateBeatsList(list)
         }
     }
 
     fun deleteBeat(index: Int) {
-        val list = _uiState.value.beats.toMutableList()
-        if (index in list.indices && list.size > 1) {
+
+        val list =
+            _uiState.value.beats
+                .toMutableList()
+
+        if (
+            index in list.indices &&
+            list.size > 1
+        ) {
+
             list.removeAt(index)
+
             updateBeatsList(list)
         }
     }
 
     fun autoAnalyzeAllPoses() {
-        val updated = _uiState.value.beats.map { beat ->
-            val detected = DialogueBeat.detectPose(beat.speaker, beat.text)
-            beat.copy(poseTag = detected)
-        }
-        _uiState.value = _uiState.value.copy(isDialogueAutoAnalyzed = true)
+
+        val updated =
+            _uiState.value.beats.map { beat ->
+
+                val detected =
+                    DialogueBeat.detectPose(
+                        beat.speaker,
+                        beat.text
+                    )
+
+                beat.copy(
+                    poseTag = detected
+                )
+            }
+
+        _uiState.value =
+            _uiState.value.copy(
+                isDialogueAutoAnalyzed = true
+            )
+
         updateBeatsList(updated)
     }
 
-    private fun updateBeatsList(newList: List<DialogueBeat>) {
-        val totalDuration = newList.sumOf { it.durationSec.toDouble() }.toFloat().coerceAtLeast(1f)
-        val currentProject = _uiState.value.project
-        val serialized = AppDatabase.serializeBeats(newList)
+    private fun updateBeatsList(
+        newList: List<DialogueBeat>
+    ) {
 
-        _uiState.value = _uiState.value.copy(
-            beats = newList,
-            totalDurationSec = totalDuration
-        )
+        val beatDuration =
+            newList.sumOf {
+                it.durationSec.toDouble()
+            }
+                .toFloat()
+                .coerceAtLeast(1f)
+
+        val currentProject =
+            _uiState.value.project
+
+        val serialized =
+            AppDatabase.serializeBeats(newList)
+
+        val timelineDuration =
+            if (
+                currentProject != null &&
+                currentProject.archieAudioDurationSec > 0f
+            ) {
+                currentProject.archieAudioDurationSec
+            } else {
+                beatDuration
+            }
+
+        _uiState.value =
+            _uiState.value.copy(
+                beats = newList,
+                totalDurationSec = timelineDuration
+            )
 
         if (currentProject != null) {
-            val updatedProject = currentProject.copy(
-                dialogueJson = serialized,
-                durationSeconds = totalDuration.toInt(),
-                updatedAt = System.currentTimeMillis()
-            )
-            _uiState.value = _uiState.value.copy(project = updatedProject)
+
+            val updatedProject =
+                currentProject.copy(
+                    dialogueJson = serialized,
+                    durationSeconds =
+                        timelineDuration.toInt(),
+                    updatedAt =
+                        System.currentTimeMillis()
+                )
+
+            _uiState.value =
+                _uiState.value.copy(
+                    project = updatedProject
+                )
+
             viewModelScope.launch {
-                repository.updateProject(updatedProject)
+                repository.updateProject(
+                    updatedProject
+                )
             }
         }
     }
@@ -264,20 +592,56 @@ class StudioEditorViewModel(application: Application) : AndroidViewModel(applica
         showSafeZoneOverlay: Boolean? = null,
         title: String? = null
     ) {
-        val current = _uiState.value.project ?: return
-        val updated = current.copy(
-            title = title ?: current.title,
-            backgroundTheme = theme?.name ?: current.backgroundTheme,
-            musicTrack = musicTrack ?: current.musicTrack,
-            musicVolume = musicVolume ?: current.musicVolume,
-            voiceVolume = voiceVolume ?: current.voiceVolume,
-            audioNormalized = normalized ?: current.audioNormalized,
-            duckingEnabled = ducking ?: current.duckingEnabled,
-            subtitleStyle = subtitleStyle?.name ?: current.subtitleStyle,
-            showSafeZoneOverlay = showSafeZoneOverlay ?: current.showSafeZoneOverlay,
-            updatedAt = System.currentTimeMillis()
-        )
-        _uiState.value = _uiState.value.copy(project = updated)
+
+        val current =
+            _uiState.value.project ?: return
+
+        val updated =
+            current.copy(
+                title =
+                    title ?: current.title,
+                backgroundTheme =
+                    theme?.name
+                        ?: current.backgroundTheme,
+                musicTrack =
+                    musicTrack
+                        ?: current.musicTrack,
+                musicVolume =
+                    musicVolume
+                        ?: current.musicVolume,
+                voiceVolume =
+                    voiceVolume
+                        ?: current.voiceVolume,
+                audioNormalized =
+                    normalized
+                        ?: current.audioNormalized,
+                duckingEnabled =
+                    ducking
+                        ?: current.duckingEnabled,
+                subtitleStyle =
+                    subtitleStyle?.name
+                        ?: current.subtitleStyle,
+                showSafeZoneOverlay =
+                    showSafeZoneOverlay
+                        ?: current.showSafeZoneOverlay,
+                updatedAt =
+                    System.currentTimeMillis()
+            )
+
+        _uiState.value =
+            _uiState.value.copy(
+                project = updated
+            )
+
+        /*
+         * Apply volume changes immediately during preview.
+         */
+        voicePlayer.volume =
+            updated.voiceVolume.coerceIn(0f, 1f)
+
+        musicPlayer.volume =
+            updated.musicVolume.coerceIn(0f, 1f)
+
         viewModelScope.launch {
             repository.updateProject(updated)
         }
@@ -290,100 +654,176 @@ class StudioEditorViewModel(application: Application) : AndroidViewModel(applica
         scale: Float,
         flip: Boolean
     ) {
-        val current = _uiState.value.project ?: return
-        val updated = if (isArchie) {
-            current.copy(
-                archiePositionX = posX,
-                archiePositionY = posY,
-                archieScale = scale,
-                archieFlip = flip
+
+        val current =
+            _uiState.value.project ?: return
+
+        val updated =
+            if (isArchie) {
+
+                current.copy(
+                    archiePositionX = posX,
+                    archiePositionY = posY,
+                    archieScale = scale,
+                    archieFlip = flip
+                )
+
+            } else {
+
+                current.copy(
+                    jarvisPositionX = posX,
+                    jarvisPositionY = posY,
+                    jarvisScale = scale,
+                    jarvisFlip = flip
+                )
+            }
+
+        _uiState.value =
+            _uiState.value.copy(
+                project = updated
             )
-        } else {
-            current.copy(
-                jarvisPositionX = posX,
-                jarvisPositionY = posY,
-                jarvisScale = scale,
-                jarvisFlip = flip
-            )
-        }
-        _uiState.value = _uiState.value.copy(project = updated)
+
         viewModelScope.launch {
             repository.updateProject(updated)
         }
     }
 
-    fun startMp4Export(resolution: String = "1080x1920", fps: Int = 60) {
-        if (_uiState.value.renderState.isRendering) return
+    /*
+     * EXPORT IS STILL THE EXISTING PROTOTYPE.
+     *
+     * We will replace this with the real Media3 Transformer
+     * export engine after preview playback is verified.
+     */
+    fun startMp4Export(
+        resolution: String = "1080x1920",
+        fps: Int = 60
+    ) {
+
+        if (
+            _uiState.value
+                .renderState
+                .isRendering
+        ) return
+
         pausePlayback()
 
-        val project = _uiState.value.project
-        val duration = _uiState.value.totalDurationSec
-        val totalFrames = (duration * fps).toInt().coerceAtLeast(300)
-        val fileName = "${project?.title?.replace(" ", "_") ?: "Archie_Export"}_${resolution}_${fps}fps.mp4"
+        val project =
+            _uiState.value.project
 
-        _uiState.value = _uiState.value.copy(
-            renderState = RenderState(
-                isRendering = true,
-                progress = 0f,
-                currentFrame = 0,
-                totalFrames = totalFrames,
-                currentStage = "Initializing 9:16 Canvas & Assets...",
-                isComplete = false,
-                exportedFileName = fileName
+        val duration =
+            _uiState.value.totalDurationSec
+
+        val totalFrames =
+            (duration * fps)
+                .toInt()
+                .coerceAtLeast(300)
+
+        val fileName =
+            "${
+                project?.title
+                    ?.replace(" ", "_")
+                    ?: "Archie_Export"
+            }_${resolution}_${fps}fps.mp4"
+
+        _uiState.value =
+            _uiState.value.copy(
+                renderState =
+                    RenderState(
+                        isRendering = true,
+                        progress = 0f,
+                        currentFrame = 0,
+                        totalFrames = totalFrames,
+                        currentStage =
+                            "Preparing export...",
+                        isComplete = false,
+                        exportedFileName =
+                            fileName
+                    )
             )
-        )
 
         renderJob?.cancel()
-        renderJob = viewModelScope.launch {
-            val stages = listOf(
-                "Initializing 9:16 Studio Canvas Pipeline...",
-                "Synthesizing Archie & Jarvis Lip-Sync Layers...",
-                "Rasterizing Punchy Subtitle Captions...",
-                "Applying Audio Normalization (-14 LUFS)...",
-                "Mixing Ducked Audio & Dialogue Beats...",
-                "Hardware Encoding H.264 MP4 Stream (NVENC)...",
-                "Finalizing Container Muxing & Keyframes..."
-            )
 
-            var frame = 0
-            val batchSize = totalFrames / 40 + 1
+        renderJob =
+            viewModelScope.launch {
 
-            while (frame < totalFrames) {
-                delay(80)
-                frame = (frame + batchSize).coerceAtMost(totalFrames)
-                val progress = frame.toFloat() / totalFrames
-                val stageIndex = ((progress * (stages.size - 1)).toInt()).coerceIn(0, stages.lastIndex)
+                var frame = 0
 
-                _uiState.value = _uiState.value.copy(
-                    renderState = _uiState.value.renderState.copy(
-                        progress = progress,
-                        currentFrame = frame,
-                        currentStage = stages[stageIndex]
+                val batchSize =
+                    totalFrames / 40 + 1
+
+                while (
+                    frame < totalFrames
+                ) {
+
+                    delay(80)
+
+                    frame =
+                        (
+                            frame +
+                                batchSize
+                            )
+                            .coerceAtMost(
+                                totalFrames
+                            )
+
+                    val progress =
+                        frame.toFloat() /
+                            totalFrames
+
+                    _uiState.value =
+                        _uiState.value.copy(
+                            renderState =
+                                _uiState.value
+                                    .renderState
+                                    .copy(
+                                        progress =
+                                            progress,
+                                        currentFrame =
+                                            frame,
+                                        currentStage =
+                                            "Export prototype..."
+                                    )
+                        )
+                }
+
+                delay(300)
+
+                _uiState.value =
+                    _uiState.value.copy(
+                        renderState =
+                            _uiState.value
+                                .renderState
+                                .copy(
+                                    isRendering =
+                                        false,
+                                    isComplete =
+                                        true,
+                                    progress =
+                                        1f,
+                                    currentStage =
+                                        "Prototype export complete."
+                                )
                     )
-                )
             }
-
-            delay(300)
-            _uiState.value = _uiState.value.copy(
-                renderState = _uiState.value.renderState.copy(
-                    isRendering = false,
-                    isComplete = true,
-                    progress = 1.0f,
-                    currentStage = "Export Complete! Video saved to local storage."
-                )
-            )
-        }
     }
 
     fun dismissRenderModal() {
-        _uiState.value = _uiState.value.copy(
-            renderState = RenderState()
-        )
+
+        _uiState.value =
+            _uiState.value.copy(
+                renderState =
+                    RenderState()
+            )
     }
 
     override fun onCleared() {
-        super.onCleared()
+
         playbackJob?.cancel()
         renderJob?.cancel()
+
+        voicePlayer.release()
+        musicPlayer.release()
+
+        super.onCleared()
     }
 }
