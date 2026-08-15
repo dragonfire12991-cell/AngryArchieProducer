@@ -70,6 +70,7 @@ android {
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
+implementation(libs.androidx.media3.exoplayer)
   }
 }
 
