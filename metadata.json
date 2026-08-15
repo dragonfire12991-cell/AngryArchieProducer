@@ -1,0 +1,6 @@
+{
+  "name": "Angry Archie Producer",
+  "description": "Private AI-assisted video production studio for short-form 9:16 vertical videos and animated podcast content with Archie and Jarvis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
