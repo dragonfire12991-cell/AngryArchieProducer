@@ -28,6 +28,10 @@ data class ProjectEntity(
     val voiceVolume: Float = 1.0f,
     val audioNormalized: Boolean = true,
     val duckingEnabled: Boolean = true,
+
+    // Captions are OFF by default.
+    val captionsEnabled: Boolean = false,
+
     val subtitleStyle: String = SubtitleStyle.PUNCHY_YELLOW.name,
     val showSafeZoneOverlay: Boolean = false,
     val dialogueJson: String = "",
