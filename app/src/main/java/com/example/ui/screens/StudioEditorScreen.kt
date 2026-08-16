@@ -176,7 +176,7 @@ fun StudioEditorScreen(
                     // Left Pane: 9:16 Canvas Monitor & Transport Controls
                     Box(
                         modifier = Modifier
-                            .weight(1.1f)
+                            .weight(1.6f)
                             .fillMaxHeight()
                             .background(StudioBlack)
                             .padding(16.dp),
@@ -200,7 +200,7 @@ fun StudioEditorScreen(
                     // Right Pane: Studio Tabs & Workstation Controls
                     Column(
                         modifier = Modifier
-                            .weight(1.3f)
+                            .weight(1.0f)
                             .fillMaxHeight()
                             .background(StudioDarkBg)
                     ) {
@@ -224,7 +224,7 @@ fun StudioEditorScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(340.dp)
+                            .height(520.dp)
                             .background(StudioBlack)
                             .padding(8.dp),
                         contentAlignment = Alignment.Center
@@ -351,7 +351,7 @@ fun CanvasWorkbenchColumn(
                 }
 
                 // Dynamic Captions / Subtitle Overlay (TikTok / Reels Style)
-                if (state.activeCaptionText.isNotBlank()) {
+                if (project?.captionsEnabled == true && state.activeCaptionText.isNotBlank()) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -1016,7 +1016,6 @@ fun AudioMixerTabContent(
             .testTag("audio_mixer_tab_content"),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Music Track Selector
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1026,57 +1025,111 @@ fun AudioMixerTabContent(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "BACKGROUND SOUNDTRACK",
+                        text = "LIVE AUDIO MIXER",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = StudioAmber
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    listOf(
-                        "Cyber Hype Synth (Energetic 9:16)",
-                        "Lo-Fi Chill Argument (Podcast Mood)",
-                        "Breaking News Dramatic Thud",
-                        "None (Voice Only)"
-                    ).forEach { track ->
-                        val isSelected = (project?.musicTrack ?: "") == track.split(" ").first()
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clickable {
-                                    viewModel.updateProjectSettings(musicTrack = track.split(" ").first())
-                                },
-                            color = if (isSelected) StudioAmber.copy(alpha = 0.15f) else StudioCardHover,
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                if (isSelected) 1.5.dp else 1.dp,
-                                if (isSelected) StudioAmber else StudioBorder
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = track,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) StudioAmber else TextPrimary
-                                )
-                                if (isSelected) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = StudioAmber, modifier = Modifier.size(16.dp))
-                                }
-                            }
-                        }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Voice / Dialogue",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = project?.archieAudioName ?: "No dialogue audio imported",
+                        fontSize = 11.sp,
+                        color = TextSecondary
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "VOICE VOLUME",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = ArchieCrimson
+                        )
+                        Text(
+                            text = "${(((project?.voiceVolume ?: 1.0f) * 100f).roundToInt())}%",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary
+                        )
                     }
+
+                    Slider(
+                        value = project?.voiceVolume ?: 1.0f,
+                        onValueChange = { viewModel.updateProjectSettings(voiceVolume = it) },
+                        valueRange = 0f..1f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = ArchieCrimson,
+                            activeTrackColor = ArchieCrimson,
+                            inactiveTrackColor = StudioBorder
+                        ),
+                        modifier = Modifier.testTag("voice_volume_slider")
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Background Music",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = project?.backgroundMusicName ?: "No background music imported",
+                        fontSize = 11.sp,
+                        color = TextSecondary
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "MUSIC VOLUME",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = JarvisCyan
+                        )
+                        Text(
+                            text = "${(((project?.musicVolume ?: 0.35f) * 100f).roundToInt())}%",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary
+                        )
+                    }
+
+                    Slider(
+                        value = project?.musicVolume ?: 0.35f,
+                        onValueChange = { viewModel.updateProjectSettings(musicVolume = it) },
+                        valueRange = 0f..1f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = JarvisCyan,
+                            activeTrackColor = JarvisCyan,
+                            inactiveTrackColor = StudioBorder
+                        ),
+                        modifier = Modifier.testTag("music_volume_slider")
+                    )
+
+                    Text(
+                        text = "The preview players use these levels immediately during playback.",
+                        fontSize = 10.sp,
+                        color = TextMuted
+                    )
                 }
             }
         }
 
-        // Normalization & Ducking Toggles
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1091,6 +1144,7 @@ fun AudioMixerTabContent(
                         fontWeight = FontWeight.Bold,
                         color = StudioGreen
                     )
+
                     Spacer(modifier = Modifier.height(10.dp))
 
                     Row(
@@ -1098,7 +1152,7 @@ fun AudioMixerTabContent(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Auto Audio Normalization (-14 LUFS)",
                                 fontSize = 13.sp,
@@ -1106,11 +1160,12 @@ fun AudioMixerTabContent(
                                 color = TextPrimary
                             )
                             Text(
-                                text = "Levels voice output to YouTube/TikTok standard",
+                                text = "Saved as an export preference. Real normalization will be applied when the export engine is implemented.",
                                 fontSize = 11.sp,
                                 color = TextSecondary
                             )
                         }
+
                         Switch(
                             checked = project?.audioNormalized ?: true,
                             onCheckedChange = { viewModel.updateProjectSettings(normalized = it) },
@@ -1128,19 +1183,20 @@ fun AudioMixerTabContent(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Voice Ducking (-12dB Music Reduction)",
+                                text = "Voice Ducking",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
                             )
                             Text(
-                                text = "Lowers music volume during Archie & Jarvis speech",
+                                text = "Saved as an export preference. Preview currently uses the manual music-volume level above.",
                                 fontSize = 11.sp,
                                 color = TextSecondary
                             )
                         }
+
                         Switch(
                             checked = project?.duckingEnabled ?: true,
                             onCheckedChange = { viewModel.updateProjectSettings(ducking = it) },
@@ -1162,6 +1218,7 @@ fun CaptionsTabContent(
     viewModel: StudioEditorViewModel
 ) {
     val project = state.project
+    val captionsEnabled = project?.captionsEnabled ?: false
 
     LazyColumn(
         modifier = Modifier
@@ -1175,57 +1232,167 @@ fun CaptionsTabContent(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(10.dp),
                 colors = CardDefaults.cardColors(containerColor = StudioCardBg),
-                border = androidx.compose.foundation.BorderStroke(1.dp, StudioBorder)
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (captionsEnabled) StudioAmber else StudioBorder
+                )
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "SUBTITLE CAPTION STYLE",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = StudioAmber
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "CAPTIONS",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Black,
+                            color = if (captionsEnabled) StudioAmber else TextPrimary
+                        )
+                        Text(
+                            text = if (captionsEnabled) {
+                                "Captions are ON and will appear in the preview."
+                            } else {
+                                "Captions are OFF. The preview stays completely clear."
+                            },
+                            fontSize = 11.sp,
+                            color = TextSecondary
+                        )
+                    }
 
-                    SubtitleStyle.values().forEach { style ->
-                        val isSelected = project?.subtitleStyle == style.name
-                        Surface(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                                .clickable { viewModel.updateProjectSettings(subtitleStyle = style) },
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (isSelected) StudioAmber.copy(alpha = 0.15f) else StudioCardHover,
-                            border = androidx.compose.foundation.BorderStroke(
-                                if (isSelected) 1.5.dp else 1.dp,
-                                if (isSelected) StudioAmber else StudioBorder
-                            )
-                        ) {
-                            Row(
+                    Switch(
+                        checked = captionsEnabled,
+                        onCheckedChange = {
+                            viewModel.updateProjectSettings(captionsEnabled = it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = StudioBlack,
+                            checkedTrackColor = StudioAmber,
+                            uncheckedThumbColor = TextMuted,
+                            uncheckedTrackColor = StudioBorder
+                        ),
+                        modifier = Modifier.testTag("captions_enabled_switch")
+                    )
+                }
+            }
+        }
+
+        if (captionsEnabled) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = StudioCardBg),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, StudioBorder)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "SUBTITLE CAPTION STYLE",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = StudioAmber
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        SubtitleStyle.values().forEach { style ->
+                            val isSelected = project?.subtitleStyle == style.name
+
+                            Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .padding(vertical = 4.dp)
+                                    .clickable {
+                                        viewModel.updateProjectSettings(
+                                            subtitleStyle = style
+                                        )
+                                    },
+                                shape = RoundedCornerShape(8.dp),
+                                color =
+                                    if (isSelected) {
+                                        StudioAmber.copy(alpha = 0.15f)
+                                    } else {
+                                        StudioCardHover
+                                    },
+                                border = androidx.compose.foundation.BorderStroke(
+                                    if (isSelected) 1.5.dp else 1.dp,
+                                    if (isSelected) StudioAmber else StudioBorder
+                                )
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .background(Color(style.highlightColor), CircleShape)
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Text(
-                                        text = style.displayName,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (isSelected) StudioAmber else TextPrimary
-                                    )
-                                }
-                                if (isSelected) {
-                                    Icon(Icons.Default.Check, contentDescription = null, tint = StudioAmber, modifier = Modifier.size(16.dp))
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(16.dp)
+                                                .background(
+                                                    Color(style.highlightColor),
+                                                    CircleShape
+                                                )
+                                        )
+
+                                        Spacer(modifier = Modifier.width(10.dp))
+
+                                        Text(
+                                            text = style.displayName,
+                                            fontSize = 13.sp,
+                                            fontWeight =
+                                                if (isSelected) {
+                                                    FontWeight.Bold
+                                                } else {
+                                                    FontWeight.Normal
+                                                },
+                                            color =
+                                                if (isSelected) {
+                                                    StudioAmber
+                                                } else {
+                                                    TextPrimary
+                                                }
+                                        )
+                                    }
+
+                                    if (isSelected) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = StudioAmber,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(containerColor = StudioCardBg),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, StudioBorder)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = "CAPTION LAYOUT",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Caption size and vertical-position controls are the next caption upgrade. For this build the important fix is that captions can be completely disabled and no longer block the preview.",
+                            fontSize = 11.sp,
+                            color = TextMuted
+                        )
                     }
                 }
             }
