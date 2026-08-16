@@ -231,11 +231,7 @@ class StudioEditorViewModel(application: Application) : AndroidViewModel(applica
         }
 
         if (musicPlayer.mediaItemCount > 0) {
-            /*
-             * Keep soundtrack synchronized to the timeline.
-             * If the soundtrack is shorter than the voice track,
-             * ExoPlayer loops it.
-             */
+
             val musicDuration = musicPlayer.duration
 
             val musicPosition =
@@ -266,12 +262,6 @@ class StudioEditorViewModel(application: Application) : AndroidViewModel(applica
                         continue
                     }
 
-                    /*
-                     * If real voice audio exists, its playback position
-                     * becomes the master timeline clock.
-                     *
-                     * Otherwise fall back to the timeline timer.
-                     */
                     val newTime =
                         if (voicePlayer.mediaItemCount > 0) {
 
@@ -588,6 +578,7 @@ class StudioEditorViewModel(application: Application) : AndroidViewModel(applica
         voiceVolume: Float? = null,
         normalized: Boolean? = null,
         ducking: Boolean? = null,
+        captionsEnabled: Boolean? = null,
         subtitleStyle: SubtitleStyle? = null,
         showSafeZoneOverlay: Boolean? = null,
         title: String? = null
@@ -618,6 +609,9 @@ class StudioEditorViewModel(application: Application) : AndroidViewModel(applica
                 duckingEnabled =
                     ducking
                         ?: current.duckingEnabled,
+                captionsEnabled =
+                    captionsEnabled
+                        ?: current.captionsEnabled,
                 subtitleStyle =
                     subtitleStyle?.name
                         ?: current.subtitleStyle,
