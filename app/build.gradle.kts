@@ -11,7 +11,12 @@ plugins {
 
 android {
   namespace = "com.example"
-  compileSdk { version = release(36) { minorApiLevel = 1 } }
+
+  compileSdk {
+    version = release(36) {
+      minorApiLevel = 1
+    }
+  }
 
   defaultConfig {
     applicationId = "com.aistudio.angryarchie.prodhq"
@@ -26,7 +31,8 @@ android {
   signingConfigs {
     create("release") {
       val keystorePath =
-        System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+        System.getenv("KEYSTORE_PATH")
+          ?: "${rootDir}/my-upload-key.jks"
 
       storeFile = file(keystorePath)
       storePassword = System.getenv("STORE_PASSWORD")
@@ -39,15 +45,20 @@ android {
     release {
       isCrunchPngs = false
       isMinifyEnabled = false
+
       proguardFiles(
-        getDefaultProguardFile("proguard-android-optimize.txt"),
+        getDefaultProguardFile(
+          "proguard-android-optimize.txt"
+        ),
         "proguard-rules.pro"
       )
-      signingConfig = signingConfigs.getByName("release")
+
+      signingConfig =
+        signingConfigs.getByName("release")
     }
 
     debug {
-      // Use Android's standard debug signing configuration.
+      // Android standard debug signing configuration.
     }
   }
 
@@ -70,101 +81,332 @@ android {
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
-
   }
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
-  ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
+
+  ignoreList.add(
+    "FIREBASE_APPCHECK_DEBUG_TOKEN"
+  )
 }
 
-// Allow the debug APK to build even when google-services.json
-// is not present in the repository.
 googleServices {
-  missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN
+  missingGoogleServicesStrategy =
+    MissingGoogleServicesStrategy.WARN
 }
 
-// Some unused dependencies are commented out below instead of being removed.
-// This makes it easy to add them back in the future if needed.
 dependencies {
-  implementation("androidx.media3:media3-exoplayer:1.8.0")
 
-  implementation(platform(libs.androidx.compose.bom))
-  implementation(platform(libs.firebase.bom))
+  /*
+   * -------------------------------------------------------
+   * MEDIA3 / EXOPLAYER
+   * -------------------------------------------------------
+   *
+   * Real playback engine for:
+   *
+   * - Archie/Jarvis dialogue audio
+   * - Background music
+   * - Play / Pause
+   * - Seeking
+   * - Volume control
+   *
+   * media3-common supplies MediaItem and Player.
+   * media3-exoplayer supplies ExoPlayer.
+   */
+
+  implementation(
+    "androidx.media3:media3-common:1.8.0"
+  )
+
+  implementation(
+    "androidx.media3:media3-exoplayer:1.8.0"
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * COMPOSE / FIREBASE BOM
+   * -------------------------------------------------------
+   */
+
+  implementation(
+    platform(libs.androidx.compose.bom)
+  )
+
+  implementation(
+    platform(libs.firebase.bom)
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * ANDROID / COMPOSE
+   * -------------------------------------------------------
+   */
+
+  implementation(
+    libs.androidx.activity.compose
+  )
+
+  implementation(
+    libs.androidx.compose.material.icons.core
+  )
+
+  implementation(
+    libs.androidx.compose.material.icons.extended
+  )
+
+  implementation(
+    libs.androidx.compose.material3
+  )
+
+  implementation(
+    libs.androidx.compose.ui
+  )
+
+  implementation(
+    libs.androidx.compose.ui.graphics
+  )
+
+  implementation(
+    libs.androidx.compose.ui.tooling.preview
+  )
+
+  implementation(
+    libs.androidx.core.ktx
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * LIFECYCLE / VIEWMODEL / NAVIGATION
+   * -------------------------------------------------------
+   */
+
+  implementation(
+    libs.androidx.lifecycle.runtime.compose
+  )
+
+  implementation(
+    libs.androidx.lifecycle.runtime.ktx
+  )
+
+  implementation(
+    libs.androidx.lifecycle.viewmodel.compose
+  )
+
+  implementation(
+    libs.androidx.navigation.compose
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * ROOM DATABASE
+   * -------------------------------------------------------
+   */
+
+  implementation(
+    libs.androidx.room.ktx
+  )
+
+  implementation(
+    libs.androidx.room.runtime
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * IMAGE LOADING
+   * -------------------------------------------------------
+   */
+
+  implementation(
+    libs.coil.compose
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * MOSHI / RETROFIT / NETWORK
+   * -------------------------------------------------------
+   */
+
+  implementation(
+    libs.converter.moshi
+  )
+
+  implementation(
+    libs.logging.interceptor
+  )
+
+  implementation(
+    libs.moshi.kotlin
+  )
+
+  implementation(
+    libs.okhttp
+  )
+
+  implementation(
+    libs.retrofit
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * FIREBASE
+   * -------------------------------------------------------
+   */
+
+  implementation(
+    libs.firebase.ai
+  )
+
+  implementation(
+    libs.firebase.appcheck.recaptcha
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * COROUTINES
+   * -------------------------------------------------------
+   */
+
+  implementation(
+    libs.kotlinx.coroutines.android
+  )
+
+  implementation(
+    libs.kotlinx.coroutines.core
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * OPTIONAL DEPENDENCIES
+   * -------------------------------------------------------
+   */
 
   // implementation(libs.accompanist.permissions)
-
-  implementation(libs.androidx.activity.compose)
 
   // implementation(libs.androidx.camera.camera2)
   // implementation(libs.androidx.camera.core)
   // implementation(libs.androidx.camera.lifecycle)
   // implementation(libs.androidx.camera.view)
 
-  implementation(libs.androidx.compose.material.icons.core)
-  implementation(libs.androidx.compose.material.icons.extended)
-  implementation(libs.androidx.compose.material3)
-  implementation(libs.androidx.compose.ui)
-  implementation(libs.androidx.compose.ui.graphics)
-  implementation(libs.androidx.compose.ui.tooling.preview)
-  implementation(libs.androidx.core.ktx)
-
   // implementation(libs.androidx.datastore.preferences)
 
-  implementation(libs.androidx.lifecycle.runtime.compose)
-  implementation(libs.androidx.lifecycle.runtime.ktx)
-  implementation(libs.androidx.lifecycle.viewmodel.compose)
-  implementation(libs.androidx.navigation.compose)
-  implementation(libs.androidx.room.ktx)
-  implementation(libs.androidx.room.runtime)
-  implementation(libs.coil.compose)
-  implementation(libs.converter.moshi)
-  implementation(libs.firebase.ai)
-
-  // Uncomment to use Firestore:
   // implementation(libs.firebase.firestore)
 
-  // Uncomment ALL FOUR of the following dependencies together to use
-  // Firebase Auth and Google Sign-In via Credential Manager:
   // implementation(libs.firebase.auth)
   // implementation(libs.androidx.credentials)
   // implementation(libs.androidx.credentials.play.services)
   // implementation(libs.googleid)
 
-  implementation(libs.firebase.appcheck.recaptcha)
-  implementation(libs.kotlinx.coroutines.android)
-  implementation(libs.kotlinx.coroutines.core)
-  implementation(libs.logging.interceptor)
-  implementation(libs.moshi.kotlin)
-  implementation(libs.okhttp)
-
   // implementation(libs.play.services.location)
 
-  implementation(libs.retrofit)
 
-  testImplementation(libs.androidx.compose.ui.test.junit4)
-  testImplementation(libs.androidx.core)
-  testImplementation(libs.androidx.junit)
-  testImplementation(libs.junit)
-  testImplementation(libs.kotlinx.coroutines.test)
-  testImplementation(libs.robolectric)
-  testImplementation(libs.roborazzi)
-  testImplementation(libs.roborazzi.compose)
-  testImplementation(libs.roborazzi.junit.rule)
+  /*
+   * -------------------------------------------------------
+   * UNIT TESTS
+   * -------------------------------------------------------
+   */
 
-  androidTestImplementation(platform(libs.androidx.compose.bom))
-  androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-  androidTestImplementation(libs.androidx.espresso.core)
-  androidTestImplementation(libs.androidx.junit)
-  androidTestImplementation(libs.androidx.runner)
+  testImplementation(
+    libs.androidx.compose.ui.test.junit4
+  )
 
-  debugImplementation(libs.androidx.compose.ui.test.manifest)
-  debugImplementation(libs.androidx.compose.ui.tooling)
+  testImplementation(
+    libs.androidx.core
+  )
 
-  "ksp"(libs.androidx.room.compiler)
-  "ksp"(libs.moshi.kotlin.codegen)
+  testImplementation(
+    libs.androidx.junit
+  )
+
+  testImplementation(
+    libs.junit
+  )
+
+  testImplementation(
+    libs.kotlinx.coroutines.test
+  )
+
+  testImplementation(
+    libs.robolectric
+  )
+
+  testImplementation(
+    libs.roborazzi
+  )
+
+  testImplementation(
+    libs.roborazzi.compose
+  )
+
+  testImplementation(
+    libs.roborazzi.junit.rule
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * ANDROID TESTS
+   * -------------------------------------------------------
+   */
+
+  androidTestImplementation(
+    platform(libs.androidx.compose.bom)
+  )
+
+  androidTestImplementation(
+    libs.androidx.compose.ui.test.junit4
+  )
+
+  androidTestImplementation(
+    libs.androidx.espresso.core
+  )
+
+  androidTestImplementation(
+    libs.androidx.junit
+  )
+
+  androidTestImplementation(
+    libs.androidx.runner
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * DEBUG
+   * -------------------------------------------------------
+   */
+
+  debugImplementation(
+    libs.androidx.compose.ui.test.manifest
+  )
+
+  debugImplementation(
+    libs.androidx.compose.ui.tooling
+  )
+
+
+  /*
+   * -------------------------------------------------------
+   * KSP
+   * -------------------------------------------------------
+   */
+
+  "ksp"(
+    libs.androidx.room.compiler
+  )
+
+  "ksp"(
+    libs.moshi.kotlin.codegen
+  )
 }
